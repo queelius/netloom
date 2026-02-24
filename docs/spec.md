@@ -42,6 +42,10 @@ When `format` is omitted, it is inferred from file extensions (`.jsonl`, `.json`
 
 A directory path ingests all matching files recursively.
 
+### Preprocessing is out of scope
+
+netloom ingests structured records. If your source data needs regex extraction, JSONPath queries, or other transformations to become structured, do that upstream and feed netloom clean JSONL. A 10-line Python script or `jq` pipeline is the right tool for ETL — netloom is the declarative glue layer, not a data wrangling tool.
+
 ### Markdown handling
 
 Markdown documents are converted to structured records before entering the extraction pipeline.
