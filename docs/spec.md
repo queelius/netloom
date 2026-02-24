@@ -108,16 +108,41 @@ Markdown is structured data. The parser extracts:
 - **`body`**: full content below the title heading
 - **`sections`**: list of `{heading, level, body}` for each `##`+ heading
 
-### Source metadata
+### Source metadata (provenance)
 
-Every ingested record automatically gets a `_source` field containing the source file path. This is always available for extraction, regardless of format:
+Every ingested record automatically gets a `_meta` object with full provenance. This is always available for extraction, regardless of format:
+
+```json
+{
+  "_meta": {
+    "source_path": "data/conversations/debug-auth.json",
+    "source_line": null,
+    "source_index": 0,
+    "file_modified": "2024-11-15T09:30:00Z",
+    "file_size": 1842,
+    "ingested_at": "2026-02-24T14:00:00Z"
+  }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `source_path` | File path relative to source root |
+| `source_line` | Line number for JSONL records (null for file-per-document) |
+| `source_index` | Record index within file (0 for file-per-document) |
+| `file_modified` | Last-modified timestamp of the source file |
+| `file_size` | Source file size in bytes |
+| `ingested_at` | When this record was ingested |
+
+Access provenance fields via the extraction pipeline:
 
 ```yaml
 fields:
-  filename: { pluck: _source }
+  filename: { from: _meta, pluck: source_path }
+  modified: { from: _meta, pluck: file_modified }
 ```
 
-For file-per-document formats (JSON files, markdown), `_source` is the file path. For multi-record formats (JSONL, YAML multi-doc), it includes the file path and line/document number. This provides data provenance — you can always trace a node back to the source document that produced it.
+This provides full data provenance — you can always trace a node back to exactly which file, line, and time produced it.
 
 Since `sections` is a list of objects, it works with the extraction pipeline just like JSON arrays:
 
