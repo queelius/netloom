@@ -29,6 +29,26 @@ Vector databases are fast nearest-neighbor lookup engines. They answer "what's s
 
 **Sweet spot**: Small-to-medium corpora (<10K documents) where you want to understand structure, not just retrieve.
 
+## Source formats
+
+netloom ingests structured data from multiple formats:
+
+| Format | Example |
+|--------|---------|
+| JSONL | `data/conversations.jsonl` |
+| JSON files | `data/papers/*.json` |
+| YAML | `data/config.yaml` (single or multi-document) |
+| Markdown + frontmatter | `notes/*.md` (YAML frontmatter + body) |
+| Plain markdown | `docs/*.md` (headings and sections extracted as structured data) |
+
+Markdown is treated as structured data: headings become `title`, `##` sections become a `sections` list, and the content becomes `body`. Every record gets a `_source` field for provenance.
+
+```yaml
+source:
+  path: data/conversations/
+  format: jsonl
+```
+
 ## Core abstractions
 
 **Nodes** define the units of your graph. A single source document can produce multiple node types:

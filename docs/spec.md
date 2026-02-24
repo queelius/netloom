@@ -5,10 +5,177 @@
 netloom configs have four top-level sections. All are optional, but a useful config needs at least `nodes` and either `links` or `network`.
 
 ```yaml
+source:       # Where and how to load documents
 schema:       # Data shape and extraction (optional)
 nodes:        # Node types and embedding config
 links:        # Relationship definitions between nodes
 network:      # Graph construction parameters
+```
+
+---
+
+## Source
+
+The source section declares what to ingest and how to interpret it. Since nodes are decoupled from documents, the ingestion layer just needs to produce structured records that the extraction pipeline can work on.
+
+### Source formats
+
+| Format | Description | Record boundary |
+|--------|-------------|-----------------|
+| JSONL | One JSON object per line | Line |
+| JSON array | Top-level array of objects | Array element |
+| JSON files | Directory of `.json` files | File |
+| YAML | Single document or multi-document (`---` separated) | Document |
+| Markdown + frontmatter | YAML frontmatter + body | File |
+| Markdown | Plain markdown, no frontmatter | File |
+
+### Configuration
+
+```yaml
+source:
+  path: data/conversations/       # file or directory
+  format: jsonl                    # jsonl | json | yaml | markdown
+```
+
+When `format` is omitted, it is inferred from file extensions (`.jsonl`, `.json`, `.yaml`/`.yml`, `.md`).
+
+A directory path ingests all matching files recursively.
+
+### Markdown handling
+
+Markdown documents are converted to structured records before entering the extraction pipeline.
+
+**Markdown + frontmatter** (has `---` delimiters at top):
+
+```markdown
+---
+title: Debug authentication middleware
+tags: [debugging, auth, redis]
+date: 2024-11-15
+---
+
+The auth middleware is rejecting valid tokens after the Redis upgrade...
+```
+
+Becomes:
+
+```json
+{
+  "title": "Debug authentication middleware",
+  "tags": ["debugging", "auth", "redis"],
+  "date": "2024-11-15",
+  "body": "The auth middleware is rejecting valid tokens after the Redis upgrade..."
+}
+```
+
+The frontmatter fields are promoted to top-level keys. The markdown body becomes the `body` field.
+
+**Plain markdown** (no frontmatter):
+
+```markdown
+# Debug authentication middleware
+
+## Problem
+
+The auth middleware is rejecting valid tokens after the Redis upgrade.
+
+## Investigation
+
+Checked the Redis connection config and token validation logic.
+
+## Solution
+
+The Redis key prefix changed from 'session:' to 'sess:' in v7.
+```
+
+Becomes:
+
+```json
+{
+  "_source": "notes/debug-auth-middleware.md",
+  "title": "Debug authentication middleware",
+  "body": "## Problem\n\nThe auth middleware is rejecting...",
+  "sections": [
+    { "heading": "Problem", "level": 2, "body": "The auth middleware is rejecting valid tokens after the Redis upgrade." },
+    { "heading": "Investigation", "level": 2, "body": "Checked the Redis connection config and token validation logic." },
+    { "heading": "Solution", "level": 2, "body": "The Redis key prefix changed from 'session:' to 'sess:' in v7." }
+  ]
+}
+```
+
+Markdown is structured data. The parser extracts:
+- **`title`**: first `#` heading (null if none)
+- **`body`**: full content below the title heading
+- **`sections`**: list of `{heading, level, body}` for each `##`+ heading
+
+### Source metadata
+
+Every ingested record automatically gets a `_source` field containing the source file path. This is always available for extraction, regardless of format:
+
+```yaml
+fields:
+  filename: { pluck: _source }
+```
+
+For file-per-document formats (JSON files, markdown), `_source` is the file path. For multi-record formats (JSONL, YAML multi-doc), it includes the file path and line/document number. This provides data provenance — you can always trace a node back to the source document that produced it.
+
+Since `sections` is a list of objects, it works with the extraction pipeline just like JSON arrays:
+
+```yaml
+nodes:
+  document:
+    from: .
+    fields:
+      title: { pluck: title }
+    embed:
+      field: title
+      model: tfidf
+
+  section:
+    from: sections
+    fields:
+      heading: { pluck: heading }
+      text: { pluck: body }
+    embed:
+      field: text
+      model: tfidf
+```
+
+This creates a heterogeneous graph from a directory of plain markdown files — document nodes and section nodes — without any frontmatter at all.
+
+This means a markdown-based config can look like:
+
+```yaml
+source:
+  path: notes/
+  format: markdown
+
+nodes:
+  note:
+    from: .
+    fields:
+      title: { pluck: title }
+      tags: { pluck: tags, default: [] }
+      text: { pluck: body }
+    embed:
+      field: text
+      model: tfidf
+
+links:
+  similar_notes:
+    between: [note, note]
+    method: cosine
+    min: 0.3
+```
+
+### Multiple sources (planned)
+
+```yaml
+source:
+  - path: data/conversations.jsonl
+    format: jsonl
+  - path: data/papers/
+    format: json
 ```
 
 ---
@@ -507,3 +674,5 @@ These are unresolved decisions that need investigation before implementation:
 5. **Per-turn embeddings**: `aggregate: none` would keep per-chunk/per-item vectors separate, requiring a `match:` strategy (max, mean, direct) on the link side. Useful but second-tier.
 
 6. **Duplicate YAML keys**: Two `contains` links with different `between` values can't share the same key name in YAML. Solution: use unique names (`contains_user_turns`, `contains_assistant_turns`).
+
+7. **Markdown parsing depth**: The current spec extracts `title`, `body`, and `sections` from plain markdown. Should it go further — code blocks, links, lists, block quotes? Where's the line between "structured record from markdown" and "full AST"? Probably: keep it shallow (headings and sections), let users preprocess for deeper structure.
