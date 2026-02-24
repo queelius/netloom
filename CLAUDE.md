@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working in this repository.
 
 ## Project status
 
-**This is a design-phase repository.** There is no implementation code yet. The DSL specification lives in `docs/spec.md` and the examples in `docs/examples/`. The goal is to refine the design before writing code.
+**This is a design-phase repository.** There is no implementation code yet. The DSL specification lives in `docs/spec.md` (implementation-ready, v1) and the examples in `docs/examples/`. All design questions have been resolved.
 
 ## What netloom is
 
@@ -13,15 +13,16 @@ A declarative YAML-based language for constructing complex networks (graphs) fro
 - **Links**: relationships between nodes (similarity, structural, attribute-based)
 - **Network**: graph construction parameters (thresholds, community detection)
 
-The output is a weighted heterogeneous graph for analysis with standard tools (NetworkX, etc.).
+The output is a NetworkX `DiGraph` (Python API) or serialized graph file (CLI: GraphML, JSON, GEXF, edgelist).
 
 ## Key files
 
 | File | Purpose |
 |------|---------|
-| `docs/spec.md` | Full DSL specification (the primary design artifact) |
+| `docs/spec.md` | Full DSL specification (implementation-ready, v1) |
 | `docs/examples/conversations.yaml` | Heterogeneous graph: conversations + turns |
-| `docs/examples/papers.yaml` | Homogeneous graph: academic papers |
+| `docs/examples/papers.yaml` | Homogeneous graph: academic papers with citations |
+| `docs/examples/citations.yaml` | Citation network: reference links, multiple sources, named embeds |
 | `pyproject.toml` | Python project config (no deps yet) |
 | `README.md` | Project overview and motivation |
 
@@ -93,10 +94,6 @@ netloom's DSL evolved from [complex-network-rag](https://github.com/queelius/com
 - **Added**: heterogeneous node types, `between:` on links, `parent` method
 - **Replaced**: JSONPath extraction with `from/where/pluck/reduce` pipeline
 - **Replaced**: `gate` operator with `min:` on combine refs
-
-## Open design questions
-
-See the "Open design questions" section at the bottom of `docs/spec.md` for unresolved decisions.
 
 ## Working in this repo
 

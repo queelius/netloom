@@ -1,0 +1,126 @@
+# netloom config: Citation network
+#
+# Demonstrates method: reference for building directed citation graphs.
+# Papers cite other papers via foreign-key lookup. The resulting DiGraph
+# has directed edges from citing paper to cited paper.
+#
+# Also demonstrates: multiple sources, weight_field on reference links,
+# named embeds, cross-type embed parameter on links.
+#
+# Source document format (papers):
+#
+#   {
+#     "paper_id": "arxiv-2301.01234",
+#     "title": "Attention Is All You Need",
+#     "abstract": "The dominant sequence transduction models...",
+#     "year": 2017,
+#     "references": [
+#       { "target": "arxiv-1409.0473", "context": "encoder-decoder" },
+#       { "target": "arxiv-1508.04025", "context": "attention" }
+#     ]
+#   }
+#
+# Source document format (reviews):
+#
+#   {
+#     "review_id": "rev-9001",
+#     "paper_id": "arxiv-2301.01234",
+#     "text": "This paper introduces the transformer architecture...",
+#     "rating": 8
+#   }
+
+defaults:
+  embed:
+    model: tfidf
+
+source:
+  - path: data/papers.jsonl
+    format: jsonl
+  - path: data/reviews.jsonl
+    format: jsonl
+
+schema:
+  references:
+    type: list
+    default: []
+
+  # Extract just the target IDs from reference objects
+  reference_ids:
+    from: references
+    pluck: target
+    # No reduce: stays as list for reference link lookup
+
+nodes:
+  paper:
+    from: .
+    fields:
+      paper_id: { pluck: paper_id }
+      title: { pluck: title }
+      abstract: { pluck: abstract, default: "" }
+      year: { pluck: year }
+      reference_ids: { pluck: reference_ids }
+    embed:
+      title_vec:
+        field: title
+      abstract_vec:
+        field: abstract
+
+  review:
+    from: .
+    fields:
+      review_id: { pluck: review_id }
+      paper_id: { pluck: paper_id }
+      text: { pluck: text }
+      rating: { pluck: rating }
+    embed:
+      text_vec:
+        field: text
+
+links:
+  # Citation: directed edge from citing paper to cited paper
+  # A cites B when B.paper_id is in A.reference_ids
+  cites:
+    between: [paper, paper]
+    method: reference
+    field: reference_ids
+    target_field: paper_id
+
+  # Title similarity between papers
+  title_similarity:
+    between: [paper, paper]
+    method: cosine
+    embed: title_vec
+    min: 0.3
+
+  # Abstract similarity between papers
+  abstract_similarity:
+    between: [paper, paper]
+    method: cosine
+    embed: abstract_vec
+    min: 0.3
+
+  # Cross-type: match paper abstracts against review text
+  paper_review_similarity:
+    between: [paper, review]
+    method: cosine
+    embed: [abstract_vec, text_vec]
+    min: 0.4
+
+  # Review links to the paper it reviews (foreign key)
+  reviews:
+    between: [review, paper]
+    method: reference
+    field: paper_id
+    target_field: paper_id
+
+  # Year proximity between papers
+  year_proximity:
+    between: [paper, paper]
+    method: numeric
+    field: year
+    scale: 3
+
+network:
+  min: 0.25
+  communities:
+    algorithm: louvain

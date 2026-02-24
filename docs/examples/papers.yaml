@@ -1,20 +1,34 @@
 # netloom config: Academic paper similarity network
 #
-# A simpler example: one node type per document, multiple link types.
 # Builds a homogeneous graph where papers are connected by
-# content similarity, shared authors, and topic overlap.
+# content similarity, shared authors, topic overlap, and citations.
+#
+# Demonstrates: defaults block, reference links, numeric similarity,
+# link-level combine, named embeds.
+#
+# Output: nx.DiGraph with semantic, attribute, structural, and
+# reference edges.
 #
 # Source document format:
 #
 #   {
-#     "id": "arxiv-2301.01234",
+#     "paper_id": "arxiv-2301.01234",
 #     "title": "Attention Is All You Need",
 #     "abstract": "The dominant sequence transduction models are based on...",
 #     "authors": ["Vaswani", "Shazeer", "Parmar", "Uszkoreit"],
 #     "tags": ["transformers", "attention", "nlp", "deep-learning"],
 #     "year": 2017,
-#     "venue": "NeurIPS"
+#     "venue": "NeurIPS",
+#     "references": ["arxiv-1409.0473", "arxiv-1508.04025"]
 #   }
+
+defaults:
+  embed:
+    model: tfidf
+
+source:
+  path: data/papers/
+  format: json
 
 schema:
   tags:
@@ -25,19 +39,24 @@ schema:
     type: list
     default: []
 
+  references:
+    type: list
+    default: []
+
 nodes:
   paper:
     from: .
     fields:
+      paper_id: { pluck: paper_id }
       title: { pluck: title }
       abstract: { pluck: abstract }
       authors: { pluck: authors }
       tags: { pluck: tags }
       year: { pluck: year }
       venue: { pluck: venue }
+      references: { pluck: references, default: [] }
     embed:
       field: abstract
-      model: tfidf
 
 links:
   # Content similarity based on abstract embeddings
@@ -64,12 +83,26 @@ links:
     method: exact
     field: venue
 
+  # Year proximity: Gaussian kernel, sigma=5
+  year_proximity:
+    between: [paper, paper]
+    method: numeric
+    field: year
+    scale: 5
+
+  # Citation links: directed edges from citing paper to cited paper
+  cites:
+    between: [paper, paper]
+    method: reference
+    field: references
+    target_field: paper_id
+
   # Combined similarity for edge creation
   overall:
     between: [paper, paper]
     combine:
       - ref: content_similarity
-        weight: 0.5
+        weight: 0.4
         min: 0.2
       - ref: coauthorship
         weight: 0.2
@@ -77,9 +110,10 @@ links:
         weight: 0.2
       - ref: same_venue
         weight: 0.1
+      - ref: year_proximity
+        weight: 0.1
 
 network:
   min: 0.25
-  strong: 0.6
   communities:
     algorithm: louvain

@@ -6,6 +6,8 @@
 #   - N user_turn nodes (one per user message)
 #   - M assistant_turn nodes (one per assistant message)
 #
+# Output: nx.DiGraph with semantic, attribute, and structural edges.
+#
 # Source document format:
 #
 #   {
@@ -32,16 +34,24 @@
 #     "tools_used": ["read_file", "grep", "edit"]
 #   }
 
+defaults:
+  embed:
+    model: tfidf
+
+source:
+  path: data/conversations/
+  format: jsonl
+
 nodes:
   conversation:
     from: .
     fields:
+      id: { pluck: id }
       title: { pluck: title }
       tags: { pluck: tags }
       project: { pluck: project }
     embed:
       field: title
-      model: tfidf
 
   user_turn:
     from: turns
@@ -51,10 +61,10 @@ nodes:
       timestamp: { pluck: timestamp }
     embed:
       field: text
-      model: tfidf
       chunking:
         method: sentences
         max_tokens: 256
+      aggregate: mean
 
   assistant_turn:
     from: turns
@@ -64,7 +74,6 @@ nodes:
       tools: { pluck: tool_calls, default: [] }
     embed:
       field: text
-      model: tfidf
 
 links:
   # Semantic: which user questions ask about similar things?

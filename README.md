@@ -4,9 +4,23 @@ Declarative language for constructing complex networks from structured data.
 
 ## What is netloom?
 
-netloom is a YAML-based DSL that describes how to build a **heterogeneous similarity network** from structured documents. You declare **node types** (the units of your graph) and **link types** (how nodes relate), and netloom constructs the graph for analysis.
+netloom is a YAML-based DSL that describes how to build a **weighted directed graph** from structured documents. You declare **node types** (the units of your graph) and **link types** (how nodes relate), and netloom constructs a NetworkX `DiGraph` for analysis.
 
-The output is a weighted graph you can analyze with standard tools: community detection, centrality measures, shortest paths, visualization.
+The output is a directed graph you can analyze with standard tools: community detection, centrality measures, shortest paths, visualization.
+
+```python
+import netloom
+
+G = netloom.build("config.yaml")   # returns nx.DiGraph
+```
+
+Or from the command line:
+
+```bash
+netloom build config.yaml                            # -> output.graphml
+netloom build config.yaml -o graph.json --format json
+netloom build config.yaml --format gexf
+```
 
 ## Why not just use a vector DB?
 
@@ -25,13 +39,21 @@ Vector databases are fast nearest-neighbor lookup engines. They answer "what's s
 - You care about graph structure: which documents are hubs, which bridge two communities
 - You want declarative control over how similarity is composed from multiple signals
 - You have multiple node types in the same graph (heterogeneous networks)
-- You're running experiments or writing papers and need to iterate cheaply
+- You need directed relationships like citations or containment alongside similarity
 
 **Sweet spot**: Small-to-medium corpora (<10K documents) where you want to understand structure, not just retrieve.
 
 ## Source formats
 
-netloom ingests structured data from multiple formats:
+netloom ingests structured data from multiple formats. A single config can combine multiple sources:
+
+```yaml
+source:
+  - path: data/conversations.jsonl
+    format: jsonl
+  - path: data/papers/
+    format: json
+```
 
 | Format | Example |
 |--------|---------|
@@ -42,15 +64,17 @@ netloom ingests structured data from multiple formats:
 | Plain markdown | `docs/*.md` (headings and sections extracted as structured data) |
 | Plain text | `corpus/*.txt` (whole file becomes `body`) |
 
-Markdown is treated as structured data: headings become `title`, `##` sections become a `sections` list, and the content becomes `body`. Plain text files are the simplest case — the entire content becomes `body`. Every record gets a `_meta` block with full provenance (source path, timestamps, content hash).
-
-```yaml
-source:
-  path: data/conversations/
-  format: jsonl
-```
+Markdown is treated as structured data: headings become `title`, `##` sections become a `sections` list, and the content becomes `body`. Every record gets a `_meta` block with full provenance (source path, timestamps, content hash).
 
 ## Core abstractions
+
+**Defaults** reduce repetition across node types:
+
+```yaml
+defaults:
+  embed:
+    model: tfidf
+```
 
 **Nodes** define the units of your graph. A single source document can produce multiple node types:
 
@@ -62,8 +86,7 @@ nodes:
       title: { pluck: title }
       tags: { pluck: tags }
     embed:
-      field: title
-      model: tfidf
+      field: title              # inherits model: tfidf from defaults
 
   user_turn:
     from: turns
@@ -72,10 +95,9 @@ nodes:
       text: { pluck: text }
     embed:
       field: text
-      model: tfidf
 ```
 
-**Links** define relationships between nodes:
+**Links** define relationships between nodes -- similarity, attribute overlap, structural containment, and foreign-key references:
 
 ```yaml
 links:
@@ -92,6 +114,12 @@ links:
   contains_turns:
     between: [conversation, user_turn]
     method: parent
+
+  cites:
+    between: [paper, paper]
+    method: reference
+    field: references
+    target_field: paper_id
 ```
 
 **Network** controls graph construction:
@@ -102,6 +130,21 @@ network:
   communities:
     algorithm: louvain
 ```
+
+## Link methods
+
+| Method | Description |
+|--------|-------------|
+| `cosine` | Cosine similarity on embedding vectors |
+| `jaccard` | Jaccard set similarity on list fields |
+| `dice` | Dice coefficient on list fields |
+| `overlap` | Overlap coefficient on list fields |
+| `exact` | Boolean equality (1.0 or 0.0) |
+| `numeric` | Gaussian kernel similarity on number fields |
+| `parent` | Structural containment (directed: parent->child) |
+| `reference` | Foreign-key lookup (directed: source->target) |
+
+Symmetric methods produce bidirectional edges. Parent and reference produce directed edges.
 
 ## Full example
 
@@ -146,16 +189,24 @@ Given a corpus of conversation JSON documents like this:
 This netloom config builds a heterogeneous graph where conversations and individual turns are separate node types, connected by semantic similarity, tag overlap, and structural containment:
 
 ```yaml
+defaults:
+  embed:
+    model: tfidf
+
+source:
+  path: data/conversations/
+  format: jsonl
+
 nodes:
   conversation:
     from: .
     fields:
+      id: { pluck: id }
       title: { pluck: title }
       tags: { pluck: tags }
       project: { pluck: project }
     embed:
       field: title
-      model: tfidf
 
   user_turn:
     from: turns
@@ -165,10 +216,10 @@ nodes:
       timestamp: { pluck: timestamp }
     embed:
       field: text
-      model: tfidf
       chunking:
         method: sentences
         max_tokens: 256
+      aggregate: mean
 
   assistant_turn:
     from: turns
@@ -178,7 +229,6 @@ nodes:
       tools: { pluck: tool_calls, default: [] }
     embed:
       field: text
-      model: tfidf
 
 links:
   user_intent_similarity:
@@ -263,10 +313,10 @@ embed:
 ## Use cases
 
 - **Conversation analysis**: Nodes are conversations and turns. Links are semantic similarity, topic overlap, temporal proximity, structural containment.
-- **Paper citation networks**: Nodes are papers and authors. Links are citation, co-authorship, topic similarity.
+- **Paper citation networks**: Nodes are papers. Links are citation (reference), co-authorship (jaccard), topic similarity (cosine).
 - **Codebase analysis**: Nodes are files, functions, modules. Links are imports, call graphs, semantic similarity.
 - **Multi-modal documents**: Nodes are text chunks, images, tables from the same document. Links are co-occurrence and cross-modal similarity.
-- **E-commerce catalogs**: Nodes are products. Links are semantic description similarity, shared categories, price-range proximity.
+- **E-commerce catalogs**: Nodes are products. Links are semantic description similarity, shared categories, price-range proximity (numeric).
 
 ## Status
 
