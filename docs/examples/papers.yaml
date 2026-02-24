@@ -1,0 +1,85 @@
+# netloom config: Academic paper similarity network
+#
+# A simpler example: one node type per document, multiple link types.
+# Builds a homogeneous graph where papers are connected by
+# content similarity, shared authors, and topic overlap.
+#
+# Source document format:
+#
+#   {
+#     "id": "arxiv-2301.01234",
+#     "title": "Attention Is All You Need",
+#     "abstract": "The dominant sequence transduction models are based on...",
+#     "authors": ["Vaswani", "Shazeer", "Parmar", "Uszkoreit"],
+#     "tags": ["transformers", "attention", "nlp", "deep-learning"],
+#     "year": 2017,
+#     "venue": "NeurIPS"
+#   }
+
+schema:
+  tags:
+    type: list
+    default: []
+
+  authors:
+    type: list
+    default: []
+
+nodes:
+  paper:
+    from: .
+    fields:
+      title: { pluck: title }
+      abstract: { pluck: abstract }
+      authors: { pluck: authors }
+      tags: { pluck: tags }
+      year: { pluck: year }
+      venue: { pluck: venue }
+    embed:
+      field: abstract
+      model: tfidf
+
+links:
+  # Content similarity based on abstract embeddings
+  content_similarity:
+    between: [paper, paper]
+    method: cosine
+    min: 0.3
+
+  # Co-authorship: papers sharing authors
+  coauthorship:
+    between: [paper, paper]
+    method: jaccard
+    field: authors
+
+  # Topic overlap: papers sharing tags/keywords
+  topic_overlap:
+    between: [paper, paper]
+    method: jaccard
+    field: tags
+
+  # Same venue
+  same_venue:
+    between: [paper, paper]
+    method: exact
+    field: venue
+
+  # Combined similarity for edge creation
+  overall:
+    between: [paper, paper]
+    combine:
+      - ref: content_similarity
+        weight: 0.5
+        min: 0.2
+      - ref: coauthorship
+        weight: 0.2
+      - ref: topic_overlap
+        weight: 0.2
+      - ref: same_venue
+        weight: 0.1
+
+network:
+  min: 0.25
+  strong: 0.6
+  communities:
+    algorithm: louvain

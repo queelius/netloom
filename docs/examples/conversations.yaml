@@ -1,0 +1,107 @@
+# netloom config: Conversation analysis
+#
+# Builds a heterogeneous graph from Claude Code conversation exports.
+# Each source document produces:
+#   - 1 conversation node (title, tags, project)
+#   - N user_turn nodes (one per user message)
+#   - M assistant_turn nodes (one per assistant message)
+#
+# Source document format:
+#
+#   {
+#     "id": "conv-2024-0142",
+#     "title": "Debug authentication middleware",
+#     "created_at": "2024-11-15T09:23:00Z",
+#     "model": "claude-sonnet-4-20250514",
+#     "turns": [
+#       {
+#         "role": "user",
+#         "text": "The auth middleware is rejecting valid tokens...",
+#         "timestamp": "2024-11-15T09:23:00Z"
+#       },
+#       {
+#         "role": "assistant",
+#         "text": "Let me check the Redis connection config...",
+#         "timestamp": "2024-11-15T09:23:05Z",
+#         "tool_calls": ["read_file", "grep"]
+#       }
+#     ],
+#     "tags": ["debugging", "auth", "redis"],
+#     "project": "backend-api",
+#     "outcome": "resolved",
+#     "tools_used": ["read_file", "grep", "edit"]
+#   }
+
+nodes:
+  conversation:
+    from: .
+    fields:
+      title: { pluck: title }
+      tags: { pluck: tags }
+      project: { pluck: project }
+    embed:
+      field: title
+      model: tfidf
+
+  user_turn:
+    from: turns
+    where: { role: user }
+    fields:
+      text: { pluck: text }
+      timestamp: { pluck: timestamp }
+    embed:
+      field: text
+      model: tfidf
+      chunking:
+        method: sentences
+        max_tokens: 256
+
+  assistant_turn:
+    from: turns
+    where: { role: assistant }
+    fields:
+      text: { pluck: text }
+      tools: { pluck: tool_calls, default: [] }
+    embed:
+      field: text
+      model: tfidf
+
+links:
+  # Semantic: which user questions ask about similar things?
+  user_intent_similarity:
+    between: [user_turn, user_turn]
+    method: cosine
+    min: 0.3
+
+  # Semantic: which user questions got similar assistant responses?
+  cross_role_similarity:
+    between: [user_turn, assistant_turn]
+    method: cosine
+    min: 0.4
+
+  # Attribute: conversations sharing tags
+  tag_overlap:
+    between: [conversation, conversation]
+    method: jaccard
+    field: tags
+
+  # Attribute: conversations in the same project
+  same_project:
+    between: [conversation, conversation]
+    method: exact
+    field: project
+
+  # Structural: conversation contains its user turns
+  contains_user_turns:
+    between: [conversation, user_turn]
+    method: parent
+
+  # Structural: conversation contains its assistant turns
+  contains_assistant_turns:
+    between: [conversation, assistant_turn]
+    method: parent
+
+network:
+  min: 0.3
+  communities:
+    algorithm: louvain

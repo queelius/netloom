@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "netloom"
+version = "0.1.0"
+description = "Declarative language for constructing complex networks from structured data"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "Alexander Towell", email = "lex@metafunctor.com" },
+]
+keywords = ["network", "graph", "dsl", "similarity", "declarative"]
+classifiers = [
+    "Development Status :: 1 - Planning",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
+
+[project.urls]
+Homepage = "https://github.com/queelius/netloom"
+Repository = "https://github.com/queelius/netloom"
+Issues = "https://github.com/queelius/netloom/issues"
+
+[project.optional-dependencies]
+openai = ["openai>=1.0"]
+ollama = ["ollama>=0.1"]
+sentence-transformers = ["sentence-transformers>=2.0"]
