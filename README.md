@@ -239,6 +239,14 @@ embed:
   model: my-model
 ```
 
+## Use cases
+
+- **Conversation analysis**: Nodes are conversations and turns. Links are semantic similarity, topic overlap, temporal proximity, structural containment.
+- **Paper citation networks**: Nodes are papers and authors. Links are citation, co-authorship, topic similarity.
+- **Codebase analysis**: Nodes are files, functions, modules. Links are imports, call graphs, semantic similarity.
+- **Multi-modal documents**: Nodes are text chunks, images, tables from the same document. Links are co-occurrence and cross-modal similarity.
+- **E-commerce catalogs**: Nodes are products. Links are semantic description similarity, shared categories, price-range proximity.
+
 ## Status
 
 **Design phase.** The DSL specification is in [`docs/spec.md`](docs/spec.md). No implementation code yet. We're refining the design before building.
