@@ -40,8 +40,9 @@ netloom ingests structured data from multiple formats:
 | YAML | `data/config.yaml` (single or multi-document) |
 | Markdown + frontmatter | `notes/*.md` (YAML frontmatter + body) |
 | Plain markdown | `docs/*.md` (headings and sections extracted as structured data) |
+| Plain text | `corpus/*.txt` (whole file becomes `body`) |
 
-Markdown is treated as structured data: headings become `title`, `##` sections become a `sections` list, and the content becomes `body`. Every record gets a `_source` field for provenance.
+Markdown is treated as structured data: headings become `title`, `##` sections become a `sections` list, and the content becomes `body`. Plain text files are the simplest case — the entire content becomes `body`. Every record gets a `_meta` block with full provenance (source path, timestamps, content hash).
 
 ```yaml
 source:

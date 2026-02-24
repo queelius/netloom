@@ -28,16 +28,17 @@ The source section declares what to ingest and how to interpret it. Since nodes 
 | YAML | Single document or multi-document (`---` separated) | Document |
 | Markdown + frontmatter | YAML frontmatter + body | File |
 | Markdown | Plain markdown, no frontmatter | File |
+| Text | Plain text (`.txt`, `.log`, etc.) | File |
 
 ### Configuration
 
 ```yaml
 source:
   path: data/conversations/       # file or directory
-  format: jsonl                    # jsonl | json | yaml | markdown
+  format: jsonl                    # jsonl | json | yaml | markdown | text
 ```
 
-When `format` is omitted, it is inferred from file extensions (`.jsonl`, `.json`, `.yaml`/`.yml`, `.md`).
+When `format` is omitted, it is inferred from file extensions (`.jsonl`, `.json`, `.yaml`/`.yml`, `.md`, `.txt`). Unrecognized extensions are treated as plain text.
 
 A directory path ingests all matching files recursively.
 
@@ -120,6 +121,7 @@ Every ingested record automatically gets a `_meta` object with full provenance. 
     "source_index": 0,
     "file_modified": "2024-11-15T09:30:00Z",
     "file_size": 1842,
+    "file_hash": "sha256:a3f2b8c1d4e5...",
     "ingested_at": "2026-02-24T14:00:00Z"
   }
 }
@@ -132,7 +134,10 @@ Every ingested record automatically gets a `_meta` object with full provenance. 
 | `source_index` | Record index within file (0 for file-per-document) |
 | `file_modified` | Last-modified timestamp of the source file |
 | `file_size` | Source file size in bytes |
+| `file_hash` | Content hash (SHA-256) of the source file |
 | `ingested_at` | When this record was ingested |
+
+The content hash enables detecting changes on re-ingestion and verifying data integrity.
 
 Access provenance fields via the extraction pipeline:
 
@@ -143,6 +148,40 @@ fields:
 ```
 
 This provides full data provenance — you can always trace a node back to exactly which file, line, and time produced it.
+
+### Plain text handling
+
+Plain text files (`.txt`, `.log`, or any unrecognized extension) produce a minimal record:
+
+```json
+{
+  "body": "The full contents of the file...",
+  "_meta": { ... }
+}
+```
+
+The entire file content becomes `body`. The filename (without extension) is available via `_meta.source_path`. This is the simplest case — a directory of `.txt` files can be turned into a network with just:
+
+```yaml
+source:
+  path: corpus/
+  format: text
+
+nodes:
+  document:
+    from: .
+    fields:
+      text: { pluck: body }
+    embed:
+      field: text
+      model: tfidf
+
+links:
+  similar:
+    between: [document, document]
+    method: cosine
+    min: 0.3
+```
 
 Since `sections` is a list of objects, it works with the extraction pipeline just like JSON arrays:
 
