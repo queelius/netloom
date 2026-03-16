@@ -169,8 +169,13 @@ Given a corpus of conversation JSON documents like this:
       "tool_calls": ["read_file", "grep"]
     },
     {
+      "role": "tool",
+      "text": "Contents of auth/middleware.py...",
+      "timestamp": "2024-11-15T09:23:06Z"
+    },
+    {
       "role": "assistant",
-      "text": "Found it -- the Redis key prefix changed from 'session:' to 'sess:' in v7.",
+      "text": "Found it -- the Redis key prefix changed from 'session:' to 'sess:' in v7. The token lookup is using the old prefix.",
       "timestamp": "2024-11-15T09:23:15Z"
     },
     {
@@ -265,7 +270,7 @@ network:
     algorithm: louvain
 ```
 
-Each source document produces one `conversation` node and multiple `turn` nodes. The resulting graph has:
+Each source document produces one `conversation` node and multiple `user_turn` and `assistant_turn` nodes. The resulting graph has:
 - **Semantic edges** between turns with similar content (cosine similarity)
 - **Attribute edges** between conversations sharing tags (Jaccard) or the same project (exact match)
 - **Structural edges** connecting conversations to their constituent turns (parent links)
@@ -276,12 +281,19 @@ netloom uses a registry pattern for all pluggable components. Built-in providers
 
 ```
 netloom/
-  embeddings/tfidf.py        # built-in, no heavy deps
-  embeddings/ollama.py        # local Ollama models
-  embeddings/openai.py        # OpenAI API
-  metrics/jaccard.py          # built-in
-  metrics/cosine.py           # built-in
-  chunking/sentences.py       # built-in
+  embeddings/tfidf.py                # built-in, no heavy deps
+  embeddings/ollama.py                # local Ollama models
+  embeddings/openai.py                # OpenAI API
+  embeddings/sentence_transformers.py # HuggingFace models
+  metrics/cosine.py                   # built-in
+  metrics/jaccard.py                  # built-in
+  metrics/dice.py                     # built-in
+  metrics/overlap.py                  # built-in
+  metrics/exact.py                    # built-in
+  metrics/numeric.py                  # built-in
+  chunking/sentences.py               # built-in
+  chunking/paragraphs.py              # built-in
+  chunking/fixed_tokens.py            # built-in
 ```
 
 Install optional providers via extras:

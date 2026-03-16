@@ -4,8 +4,8 @@
 # Papers cite other papers via foreign-key lookup. The resulting DiGraph
 # has directed edges from citing paper to cited paper.
 #
-# Also demonstrates: multiple sources, weight_field on reference links,
-# named embeds, cross-type embed parameter on links.
+# Also demonstrates: multiple sources with source scoping, weight_field
+# on reference links, named embeds, cross-type embed parameter on links.
 #
 # Source document format (papers):
 #
@@ -34,9 +34,11 @@ defaults:
     model: tfidf
 
 source:
-  - path: data/papers.jsonl
+  - name: papers
+    path: data/papers.jsonl
     format: jsonl
-  - path: data/reviews.jsonl
+  - name: reviews
+    path: data/reviews.jsonl
     format: jsonl
 
 schema:
@@ -52,6 +54,7 @@ schema:
 
 nodes:
   paper:
+    source: papers
     from: .
     fields:
       paper_id: { pluck: paper_id }
@@ -66,6 +69,7 @@ nodes:
         field: abstract
 
   review:
+    source: reviews
     from: .
     fields:
       review_id: { pluck: review_id }
@@ -106,12 +110,13 @@ links:
     embed: [abstract_vec, text_vec]
     min: 0.4
 
-  # Review links to the paper it reviews (foreign key)
+  # Review links to the paper it reviews (foreign key, weighted by rating)
   reviews:
     between: [review, paper]
     method: reference
     field: paper_id
     target_field: paper_id
+    weight_field: rating
 
   # Year proximity between papers
   year_proximity:

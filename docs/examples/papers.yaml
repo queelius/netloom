@@ -54,7 +54,7 @@ nodes:
       tags: { pluck: tags }
       year: { pluck: year }
       venue: { pluck: venue }
-      references: { pluck: references, default: [] }
+      references: { pluck: references }
     embed:
       field: abstract
 

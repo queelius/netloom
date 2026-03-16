@@ -125,6 +125,35 @@ source:
 
 When `format` is omitted, it is inferred from file extensions (`.jsonl`, `.json`, `.yaml`/`.yml`, `.md`, `.txt`). Unrecognized extensions are treated as plain text. A directory path ingests all matching files recursively.
 
+### Source scoping
+
+When using multiple sources with different document structures, node types can be scoped to specific sources using the `source:` key:
+
+```yaml
+source:
+  - name: papers
+    path: data/papers.jsonl
+    format: jsonl
+  - name: reviews
+    path: data/reviews.jsonl
+    format: jsonl
+
+nodes:
+  paper:
+    source: papers           # only process records from the papers source
+    from: .
+    fields:
+      title: { pluck: title }
+
+  review:
+    source: reviews          # only process records from the reviews source
+    from: .
+    fields:
+      text: { pluck: text }
+```
+
+The `name:` on a source entry provides a label for node types to reference. When `name:` is omitted, it defaults to the filename stem of `path` (e.g., `data/papers.jsonl` defaults to `papers`). When `source:` is omitted on a node type, the node type processes records from all sources -- this is the common case for single-source configs.
+
 ### Source formats
 
 | Format | Description | Record boundary |
@@ -198,6 +227,27 @@ The parser extracts:
 - **`body`**: full content below the title heading
 - **`sections`**: list of `{heading, level, body}` for each `##`+ heading
 
+Since `sections` is a list of objects, it works with the extraction pipeline just like JSON arrays:
+
+```yaml
+nodes:
+  document:
+    from: .
+    fields:
+      title: { pluck: title }
+
+  section:
+    from: sections
+    fields:
+      heading: { pluck: heading }
+      text: { pluck: body }
+    embed:
+      field: text
+      model: tfidf
+```
+
+This creates a heterogeneous graph from a directory of plain markdown files -- document nodes and section nodes -- without any frontmatter at all.
+
 ### Plain text handling
 
 Plain text files (`.txt`, `.log`, or unrecognized extensions) produce a minimal record:
@@ -231,27 +281,6 @@ links:
     method: cosine
     min: 0.3
 ```
-
-Since `sections` is a list of objects, it works with the extraction pipeline just like JSON arrays:
-
-```yaml
-nodes:
-  document:
-    from: .
-    fields:
-      title: { pluck: title }
-
-  section:
-    from: sections
-    fields:
-      heading: { pluck: heading }
-      text: { pluck: body }
-    embed:
-      field: text
-      model: tfidf
-```
-
-This creates a heterogeneous graph from a directory of plain markdown files -- document nodes and section nodes -- without any frontmatter at all.
 
 ### Source metadata (provenance)
 
@@ -452,6 +481,10 @@ outcome:
   default: "unknown"
 ```
 
+### Execution order
+
+Schema fields are evaluated first and their results are merged into the source record. Node `fields` blocks can then reference schema-derived fields by name via `pluck:`, just like original source fields. When both schema and node `fields` declare a `default:` for the same field, the node-level `default:` takes precedence.
+
 ---
 
 ## 5. Nodes
@@ -465,6 +498,7 @@ A single source document can produce multiple nodes of different types. This is 
 ```yaml
 nodes:
   <node_type_name>:
+    source: <source_name>     # scope to a named source (optional, for multi-source)
     from: <dot-path>          # where to find items (. = whole document)
     where: { key: value }     # filter (optional, for lists)
     fields:                   # data carried by each node
@@ -539,7 +573,7 @@ embed:
     model: sentence-transformers
 ```
 
-Auto-detection rule: if `embed` has any of `field`, `model`, `chunking`, `aggregate`, `combine` at the top level, it is a single unnamed embed. Otherwise, keys are named embed block names.
+Auto-detection rule: if `embed` has any of `field`, `model`, `chunking`, `aggregate`, `combine` at the top level, it is a single unnamed embed. Otherwise, keys are named embed block names. Named embed blocks must not use these reserved property names as their names.
 
 Named embed blocks are useful when:
 - A node type needs multiple embeddings for different fields
@@ -560,6 +594,8 @@ embed:
     overlap: 50           # token overlap between chunks
   aggregate: mean         # how to combine chunk vectors
 ```
+
+`overlap` defaults to 0 (no overlap between chunks).
 
 **Chunking on list fields**: When `chunking` is specified on a field that resolves to a list, each list item is chunked individually, then all resulting vectors from all items are aggregated together.
 
@@ -696,7 +732,7 @@ links:
 
 ### Numeric similarity
 
-Uses a Gaussian kernel: `exp(-d^2 / 2*sigma^2)` where `d` is the absolute difference and `sigma` is the `scale` parameter.
+Uses a Gaussian kernel: `exp(-d^2 / (2 * sigma^2))` where `d` is the absolute difference and `sigma` is the `scale` parameter.
 
 ```yaml
 links:
@@ -711,19 +747,19 @@ links:
 
 ### Reference links
 
-Creates directed edges based on foreign-key relationships. The source node has a list field containing identifiers; the target node has a scalar field that those identifiers match against.
+Creates directed edges based on foreign-key relationships. The source node has a field containing identifiers; the target node has a scalar field that those identifiers match against.
 
 ```yaml
 links:
   cites:
     between: [paper, paper]
     method: reference
-    field: references          # list field on source node (A)
+    field: references          # list or scalar field on source node (A)
     target_field: paper_id     # scalar field on target node (B)
     # Creates edge A->B when B.paper_id is in A.references
 ```
 
-- `field:` -- list field on the first element of `between:` (source side)
+- `field:` -- field on the first element of `between:` (source side). Can be a list (one-to-many) or scalar (one-to-one). A scalar is treated as a single-element list.
 - `target_field:` -- scalar field on the second element of `between:` (target side)
 - `weight_field:` -- optional field for variable edge weights (default: 1.0)
 
@@ -827,7 +863,7 @@ links:
         weight: 0.1
 ```
 
-Combine computes a **weighted average** of the referenced link scores. The `min` on a ref means: "if this component's score is below the threshold, treat it as 0 in the weighted average."
+Combine computes a **weighted average** of the referenced link scores. The `min` on a ref means: "if this component's score is below the threshold, treat it as 0 in the weighted average." The zeroed component's weight remains in the denominator -- this dilutes the average rather than re-normalizing the remaining weights.
 
 In v1, weighted average is the only combine mode. Exotic modes (product, max, min) can be implemented via a custom `MetricProvider` plugin.
 
